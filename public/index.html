@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>전력 사용량 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+  <style>
+    body { font-family: ui-sans-serif,system-ui,AppleSDGothicNeo,Malgun Gothic,sans-serif; margin: 24px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    input, select, button { padding:8px 10px; font-size:14px; }
+    button.primary { background:#111827; color:#fff; border:0; border-radius:6px; }
+    button.ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:6px; }
+    #chart { width: 100%; height: 600px; margin-top: 12px; }
+    .hint { color:#6b7280; font-size:12px; margin-left:4px; }
+  </style>
+</head>
+<body>
+  <h2>📊 전력 사용량 대시보드</h2>
+
+  <!-- 공통 입력 -->
+  <div class="row">
+    <label>연도 <input id="year" type="text" placeholder="예: 2020" value="2020"></label>
+    <label>월 <input id="month" type="text" placeholder="예: 11" value="11"></label>
+    <select id="metric">
+      <option value="kwh" selected>kWh(전력사용량)</option>
+      <option value="bill">요금(원)</option>
+    </select>
+    <button class="primary" id="btnIndustry">산업분류 Top-N</button>
+    <button class="ghost" id="btnBizType">업종별(시군구)</button>
+  </div>
+
+  <!-- 산업분류 Top-N -->
+  <div class="row" id="industryRow">
+    <label>Top N <input id="topN" type="number" min="3" max="30" value="10" style="width:80px"></label>
+
+    <!-- metroCd 선택 -->
+    <label>시도
+      <select id="metroSel">
+        <option value="">전체(선택 안함)</option>
+        <option value="11">서울특별시</option>
+        <option value="26">부산광역시</option>
+        <option value="27">대구광역시</option>
+        <option value="28">인천광역시</option>
+        <option value="29">광주광역시</option>
+        <option value="30">대전광역시</option>
+        <option value="31">울산광역시</option>
+        <option value="36">세종특별자치시</option>
+        <option value="41">경기도</option>
+        <option value="42">강원특별자치도</option>
+        <option value="43">충청북도</option>
+        <option value="44">충청남도</option>
+        <option value="45">전북특별자치도</option>
+        <option value="46">전라남도</option>
+        <option value="47">경상북도</option>
+        <option value="48">경상남도</option>
+        <option value="50">제주특별자치도</option>
+      </select>
+    </label>
+
+    <!-- 시군구(이름) 선택 -->
+    <label>시군구
+      <select id="citySel" disabled>
+        <option value="">전체(선택 안함)</option>
+      </select>
+    </label>
+
+    <button class="primary" id="btnIndustryLoad">불러오기</button>
+  </div>
+
+  <!-- 업종별(시군구) -->
+  <div class="row" id="biztypeRow" style="display:none">
+    <label>시도
+      <select id="metroSel2">
+        <option value="">시도 선택</option>
+        <option value="11">서울특별시</option>
+        <option value="26">부산광역시</option>
+        <option value="27">대구광역시</option>
+        <option value="28">인천광역시</option>
+        <option value="29">광주광역시</option>
+        <option value="30">대전광역시</option>
+        <option value="31">울산광역시</option>
+        <option value="36">세종특별자치시</option>
+        <option value="41">경기도</option>
+        <option value="42">강원특별자치도</option>
+        <option value="43">충청북도</option>
+        <option value="44">충청남도</option>
+        <option value="45">전북특별자치도</option>
+        <option value="46">전라남도</option>
+        <option value="47">경상북도</option>
+        <option value="48">경상남도</option>
+        <option value="50">제주특별자치도</option>
+      </select>
+    </label>
+
+    <label>시군구
+      <select id="citySel2" disabled>
+        <option value="">시군구 선택</option>
+      </select>
+    </label>
+
+    <label>업종명(선택) <input id="bizType" type="text" placeholder="예: 섬유"></label>
+    <button class="primary" id="btnBizLoad">불러오기</button>
+  </div>
+
+  <div id="chart"></div>
+
+  <script>
+    const chart = echarts.init(document.getElementById('chart'));
+    const z2 = (m)=>String(m??'').padStart(2,'0');
+    const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
+    const metricKey = ()=>metric.value;
+
+    // 시군구 목록 로드 (이름 배열)
+    async function loadCitiesTo(selectEl, metroCd) {
+      selectEl.innerHTML = '<option value="">전체(선택 안함)</option>';
+      selectEl.disabled = true;
+      if (!metroCd) return;
+      const {year, month} = getYM();
+      try {
+        const res = await axios.get(`/api/cities?year=${year}&month=${month}&metroCd=${metroCd}`);
+        const cities = Array.isArray(res.data) ? res.data : [];
+        for (const name of cities) {
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = name;
+          selectEl.appendChild(opt);
+        }
+        selectEl.disabled = false;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // 산업분류 Top-N
+    async function loadIndustryTop(){
+      const {year,month}=getYM();
+      const metroCd=metroSel.value; // 코드
+      const cityName=citySel.value;  // 이름(선택 안 하면 빈)
+      const limit=Number(topN.value||10);
+      const qs=new URLSearchParams({year,month,limit});
+      if(metroCd) qs.set('metroCd', metroCd);
+      if(cityName) qs.set('city', cityName); // 이름 필터
+
+      const res=await axios.get(`/api/industry/top?${qs}`);
+      const rows=Array.isArray(res.data)?res.data:[];
+      if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
+
+      const key=metricKey();
+      const labels=rows.map(r=>r.biz||'(미분류)');
+      const values=rows.map(r=>Number(r[key]||r.powerUsage||0));
+      renderBar(`${year}년 ${month}월 산업분류 Top-${limit}${cityName? ' - '+cityName:''}`,labels,values,key);
+    }
+
+    // 업종별(시군구)
+    async function loadBizType(){
+      const {year,month}=getYM();
+      const metroCd=metroSel2.value;
+      const cityName=citySel2.value;
+      if(!metroCd || !cityName){ alert('시도와 시군구를 선택하세요'); return; }
+
+      // 코드→이름 매핑
+      const metroMap = {
+        "11":"서울특별시","26":"부산광역시","27":"대구광역시","28":"인천광역시","29":"광주광역시","30":"대전광역시","31":"울산광역시","36":"세종특별자치시",
+        "41":"경기도","42":"강원특별자치도","43":"충청북도","44":"충청남도","45":"전북특별자치도","46":"전라남도","47":"경상북도","48":"경상남도","50":"제주특별자치도"
+      };
+      const metroName = metroMap[metroCd];
+
+      const bizType=bizTypeEl.value.trim();
+      const qs=new URLSearchParams({year,month,metro:metroName,city:cityName});
+      if(bizType) qs.set('bizType', bizType);
+
+      const res=await axios.get(`/api/biztype?${qs}`);
+      const rows=Array.isArray(res.data)?res.data:[];
+      if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
+
+      const key=metricKey();
+      const agg={};
+      rows.forEach(r=>{
+        const n=r.bizType||'(미분류)';
+        const val=(key==='bill'?Number(r.bill??0):Number(r.powerUsage??r.kwh??0));
+        agg[n]=(agg[n]||0)+val;
+      });
+      const labels=Object.keys(agg);
+      const values=labels.map(k=>agg[k]);
+      renderBar(`${year}년 ${month}월 업종별 (${metroName} ${cityName})`,labels,values,key);
+    }
+
+    function renderBar(title,labels,values,key){
+      chart.setOption({
+        title:{text:title,left:'center'},
+        tooltip:{trigger:'axis', valueFormatter:v=>key==='bill'?`${v.toLocaleString()} 원`:`${v.toLocaleString()} kWh`},
+        grid:{left:60,right:20,top:60,bottom:80},
+        xAxis:{type:'category',data:labels,axisLabel:{interval:0,rotate:30}},
+        yAxis:{type:'value',name:key==='bill'?'원':'kWh'},
+        series:[{type:'bar',data:values}]
+      });
+    }
+
+    // 요소 참조
+    const year=document.getElementById('year');
+    const month=document.getElementById('month');
+    const metric=document.getElementById('metric');
+
+    // 산업분류용
+    const topN=document.getElementById('topN');
+    const metroSel=document.getElementById('metroSel');
+    const citySel=document.getElementById('citySel');
+
+    // 업종별용
+    const metroSel2=document.getElementById('metroSel2');
+    const citySel2=document.getElementById('citySel2');
+    const bizTypeEl=document.getElementById('bizType');
+
+    // 버튼/모드 전환
+    const btnIndustry=document.getElementById('btnIndustry');
+    const btnBizType=document.getElementById('btnBizType');
+    const industryRow=document.getElementById('industryRow');
+    const biztypeRow=document.getElementById('biztypeRow');
+
+    function setMode(mode){
+      btnIndustry.className = mode==='industry'?'primary':'ghost';
+      btnBizType.className  = mode==='biztype'?'primary':'ghost';
+      industryRow.style.display = mode==='industry'?'':'none';
+      biztypeRow.style.display  = mode==='biztype'?'':'none';
+    }
+
+    // 이벤트 바인딩
+    btnIndustry.onclick = ()=> setMode('industry');
+    btnBizType.onclick  = ()=> setMode('biztype');
+    document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
+    document.getElementById('btnBizLoad').onclick     = loadBizType;
+
+    // 시도 선택 → 시군구 목록 로드
+    metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
+    metroSel2.addEventListener('change', ()=> loadCitiesTo(citySel2, metroSel2.value));
+
+    // 초기 모드
+    setMode('industry');
+  </script>
+</body>
+</html>
