@@ -3,7 +3,11 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const { call } = require("./kepco"); // server/kepco.js 사용
+const { summarizeUsage } = require("./utils/insights");
+
+const sampleUsagePath = path.join(__dirname, "data", "sample-usage.json");
 
 const app = express();
 app.use(cors());
@@ -17,6 +21,31 @@ app.get("/", (_req, res) => {
 
 // 헬스체크
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+/**
+ * 사전 정의된 설비 사용 샘플 + 인사이트
+ * GET /api/usage
+ */
+app.get("/api/usage", (_req, res) => {
+  try {
+    const raw = fs.readFileSync(sampleUsagePath, "utf-8");
+    const payload = JSON.parse(raw);
+    const { facilityTotals, timeline, metrics } = summarizeUsage(payload.facilities || []);
+
+    res.json({
+      period: payload.period,
+      facilities: payload.facilities,
+      tips: payload.tips || [],
+      facilityTotals,
+      timeline,
+      insights: metrics,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "usage data unavailable" });
+  }
+});
+
 
 /**
  * 시군구 목록(이름) 조회

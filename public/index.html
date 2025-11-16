@@ -7,6 +7,7 @@
   <!-- 외부 라이브러리 -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
@@ -191,6 +192,80 @@
       border:1px solid var(--glass-border);
       box-shadow: 0 8px 30px rgba(0,0,0,0.6);
     }
+    
+    .usage-section {
+      padding: 22px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .usage-section h2 {
+      margin: 6px 0 0;
+    }
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .insight-card {
+      padding: 14px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 92px;
+    }
+    .insight-card .label { font-size: 12px; color: var(--muted); }
+    .insight-card .value { font-size: 20px; font-weight: 700; }
+    .insight-card .sub { font-size: 12px; color: var(--muted); }
+
+    .usage-chart {
+      width: 100%;
+      background: rgba(255,255,255,0.01);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .usage-chart canvas { width: 100%; }
+
+    .facility-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .facility-card {
+      border: 1px solid rgba(255,255,255,0.04);
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(0,183,255,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .tips-panel {
+      border-top: 1px solid rgba(255,255,255,0.04);
+      padding-top: 12px;
+    }
+    .tips-panel ul {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tips-panel li {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px dashed rgba(0,183,255,0.3);
+      background: rgba(0,183,255,0.05);
+      font-size: 14px;
+    }
+
 
     /* mini stat */
     .stat-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:6px; }
@@ -222,6 +297,7 @@
       main { grid-template-columns: 1fr; padding:16px; }
       #chart { height:520px; }
       .stat-grid { grid-template-columns: repeat(2,1fr); }
+      .facility-summary { grid-template-columns: 1fr; }
     }
     @media (max-width:600px){
       header { flex-direction:column; align-items:flex-start; gap:8px; }
@@ -278,6 +354,22 @@ select option:hover {
   </header>
 
   <main>
+     <section class="card usage-section" id="usageSection">
+      <div class="section-title">
+        <div class="chip">샘플 사용량 인사이트</div>
+        <h2>시간대별 전력 흐름</h2>
+        <p class="muted" id="usagePeriod">샘플 데이터를 불러오는 중...</p>
+      </div>
+      <div class="insights-grid" id="usageKpis"></div>
+      <div class="usage-chart">
+        <canvas id="usageChart" height="120"></canvas>
+      </div>
+      <div class="facility-summary" id="facilitySummary"></div>
+      <div class="tips-panel">
+        <h3>절감 팁</h3>
+        <ul id="usageTips"></ul>
+      </div>
+    </section>
     <!-- 상단 모드 선택 -->
     <div class="toolbar">
       <label>연도
@@ -377,9 +469,148 @@ select option:hover {
 
 <script>
 const chart = echarts.init(document.getElementById('chart'));
+let usageLineChart = null;
 const z2 = (m)=>String(m??'').padStart(2,'0');
 const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
 const metricKey = ()=>metric.value;
+
+const formatKwh = value => `${Math.round(Number(value || 0)).toLocaleString()} kWh`;
+const formatPercent = value => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+
+async function fetchUsageInsights(){
+  try {
+    const res = await axios.get('/api/usage');
+    const data = res.data || {};
+    const insights = data.insights || {};
+    document.getElementById('usagePeriod').textContent = data.period ? `${data.period} 기준 샘플` : '샘플 데이터';
+    renderUsageKpis(insights);
+    renderUsageChart(data.timeline || []);
+    renderFacilitySummary(data.facilityTotals || []);
+    renderUsageTips(data.tips || []);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('usagePeriod').textContent = '샘플 데이터를 불러오지 못했습니다';
+  }
+}
+
+function renderUsageKpis(insights){
+  const grid = document.getElementById('usageKpis');
+  if (!grid) return;
+  const highest = insights.highestUsage;
+  const lowest = insights.lowestUsage;
+  const peak = insights.peakHour;
+  const growth = insights.growthRate || { absolute: 0, percentage: 0 };
+  const cards = [
+    {
+      title: '최고 사용 설비',
+      value: highest ? highest.name : '-',
+      sub: highest ? formatKwh(highest.total) : '데이터 준비중',
+    },
+    {
+      title: '최저 사용 설비',
+      value: lowest ? lowest.name : '-',
+      sub: lowest ? formatKwh(lowest.total) : '데이터 준비중',
+    },
+    {
+      title: '평균 부하',
+      value: formatKwh(insights.averageUsage || 0),
+      sub: '시간대 평균',
+    },
+    {
+      title: '피크 시간대',
+      value: peak ? `${peak.hour}` : '-',
+      sub: peak ? formatKwh(peak.kwh) : '데이터 준비중',
+    },
+    {
+      title: '증감률',
+      value: formatPercent(growth.percentage || 0),
+      sub: `${growth.absolute >= 0 ? '+' : ''}${Math.round(growth.absolute || 0)} kWh`,
+    },
+  ];
+  grid.innerHTML = cards.map(card => `
+    <div class="insight-card">
+      <div class="label">${card.title}</div>
+      <div class="value">${card.value}</div>
+      <div class="sub">${card.sub}</div>
+    </div>
+  `).join('');
+}
+
+function renderUsageChart(timeline){
+  const canvas = document.getElementById('usageChart');
+  if (!canvas) return;
+  const labels = timeline.map(point => point.hour);
+  const data = timeline.map(point => point.kwh);
+  if (usageLineChart) usageLineChart.destroy();
+  usageLineChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'kWh',
+        data,
+        borderColor: '#00b7ff',
+        backgroundColor: 'rgba(0,183,255,0.15)',
+        borderWidth: 2,
+        tension: 0.35,
+        fill: true,
+        pointRadius: 3,
+        pointBackgroundColor: '#5af6d6',
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { labels: { color: '#e6f0ff' } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.y.toLocaleString()} kWh`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#93a5c6' },
+          grid: { color: 'rgba(255,255,255,0.08)' },
+        },
+        y: {
+          ticks: { color: '#93a5c6' },
+          grid: { color: 'rgba(255,255,255,0.08)' },
+        },
+      },
+    },
+  });
+}
+
+function renderFacilitySummary(rows){
+  const wrap = document.getElementById('facilitySummary');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<p class="muted">설비 요약을 불러오지 못했습니다.</p>';
+    return;
+  }
+  wrap.innerHTML = rows.map(row => `
+    <div class="facility-card">
+      <div class="label">${row.name}</div>
+      <div class="value">${formatKwh(row.total)}</div>
+      <div class="sub tiny">기준 ${row.baseline?.toLocaleString?.() || row.baseline || '-'} kWh</div>
+    </div>
+  `).join('');
+}
+
+function renderUsageTips(tips){
+  const list = document.getElementById('usageTips');
+  if (!list) return;
+  if (!tips.length) {
+    list.innerHTML = '<li>등록된 절감 팁이 없습니다.</li>';
+    return;
+  }
+  list.innerHTML = '';
+  tips.forEach(tip => {
+    const li = document.createElement('li');
+    li.textContent = tip;
+    list.appendChild(li);
+  });
+}
 
 /* -------------------------------
    산업/업종 데이터 불러오기
@@ -614,6 +845,7 @@ metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
 metroSel2.addEventListener('change', ()=> loadCitiesTo(citySel2, metroSel2.value));
 
 setMode('industry');
+fetchUsageInsights();
 </script>
 
 
