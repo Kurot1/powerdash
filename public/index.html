@@ -224,40 +224,108 @@ button.primary:hover {
     .example-form {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
-    .example-row {
-      display: flex;
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
-      flex-wrap: wrap;
     }
 
-    .example-row label {
-      flex: 1;
-      min-width: 180px;
+    .example-panel label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
     }
 
-    .example-panel textarea,
     .example-panel input,
+    .example-panel textarea,
     .example-panel select {
       width: 100%;
-      min-height: 180px;
       background: rgba(255,255,255,0.02);
       border: 1px solid rgba(0,183,255,0.18);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px 14px;
       color: var(--text);
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 13px;
-      resize: vertical;
+      font-size: 14px;
       line-height: 1.5;
+      font-family: inherit;
+      resize: vertical;
+      min-height: auto;
     }
 
-    .example-panel textarea:focus {
+    .example-panel textarea:focus,
+    .example-panel input:focus {
       outline: none;
       border-color: rgba(0,183,255,0.5);
       box-shadow: 0 12px 30px rgba(0,183,255,0.08);
+    }
+    .tips-input {
+      min-height: 120px;
+    }
+
+    .facility-builder {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .facility-builder-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+    }
+
+    .facility-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .facility-input-card {
+      border: 1px solid rgba(0,183,255,0.12);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(0,183,255,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .facility-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .facility-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+    }
+
+    .facility-usage-field {
+      min-height: 110px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    .text-button {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-size: 13px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .text-button:hover {
+      text-decoration: underline;
     }
 
     .example-actions {
@@ -286,6 +354,17 @@ button.primary:hover {
     }
     .usage-section h2 {
       margin: 6px 0 0;
+    }
+    .usage-empty {
+      border: 1px dashed rgba(0,183,255,0.3);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .usage-content[hidden] {
+      display: none;
     }
     .insights-grid {
       display: grid;
@@ -440,8 +519,24 @@ select option:hover {
   <main>
     <section class="card example-panel">
       <div class="section-title">직접 예시 입력</div>
-      <p class="muted tiny">period, facilities, tips 필드를 JSON 형식으로 작성한 뒤 아래 버튼을 누르면 인사이트 영역이 즉시 갱신됩니다.</p>
-      <textarea id="exampleInput" spellcheck="false"></textarea>
+      <p class="muted tiny">기간과 설비 정보를 입력하면 인사이트를 바로 계산해볼 수 있습니다. 시간대별 사용량은 "06:00=120"처럼 작성해주세요.</p>
+      <form class="example-form" id="exampleForm">
+        <div class="example-grid">
+          <label>기간 / 라벨
+            <input id="examplePeriod" type="text" placeholder="예: 2024-06-01">
+          </label>
+          <label>절감 팁 (한 줄에 하나씩)
+            <textarea id="exampleTips" class="tips-input" placeholder="예: 피크 시간 전 예열 제어"></textarea>
+          </label>
+        </div>
+        <div class="facility-builder">
+          <div class="facility-builder-header">
+            <span>설비별 사용량</span>
+            <button class="text-button" type="button" id="btnAddFacility">+ 설비 추가</button>
+          </div>
+          <div class="facility-list" id="facilityList"></div>
+        </div>
+      </form>
       <div class="example-actions">
         <span class="example-status" id="exampleStatus">샘플 데이터를 불러오는 중...</span>
         <button class="mode-btn ghost" id="btnExampleFill" type="button">예시 값 채우기</button>
@@ -449,19 +544,21 @@ select option:hover {
       </div>
     </section>
      <section class="card usage-section" id="usageSection">
-      <div class="section-title">
-        <div class="chip">샘플 사용량 인사이트</div>
-        <h2>시간대별 전력 흐름</h2>
-        <p class="muted" id="usagePeriod">샘플 데이터를 불러오는 중...</p>
-      </div>
-      <div class="insights-grid" id="usageKpis"></div>
-      <div class="usage-chart">
-        <canvas id="usageChart" height="120"></canvas>
-      </div>
-      <div class="facility-summary" id="facilitySummary"></div>
-      <div class="tips-panel">
-        <h3>절감 팁</h3>
-        <ul id="usageTips"></ul>
+      <div class="usage-empty" id="usageEmpty">입력값 인사이트 보기 버튼을 눌러 인사이트를 확인하세요.</div>
+      <div class="usage-content" id="usageContent" hidden>
+        <div class="section-title">
+          <div class="chip">사용량 인사이트</div>
+          <h2>시간대별 전력 흐름</h2>
+          <p class="muted" id="usagePeriod">입력값을 기다리는 중...</p>
+        </div>
+        <div class="insights-grid" id="usageKpis"></div>
+        <div class="usage-chart">
+          <canvas id="usageChart" height="120"></canvas>
+        </div>
+        <div class="facility-summary" id="facilitySummary"></div>
+        <div class="tips-panel">
+          <h3>절감 팁</h3>
+          <ul id="usageTips">
       </div>
     </section>
     <!-- 상단 모드 선택 -->
@@ -627,15 +724,140 @@ const z2 = (m)=>String(m??'').padStart(2,'0');
 const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
 const metricKey = ()=>metric.value;
 
-const exampleInput = document.getElementById('exampleInput');
 const exampleStatus = document.getElementById('exampleStatus');
 const btnExampleApply = document.getElementById('btnExampleApply');
 const btnExampleFill = document.getElementById('btnExampleFill');
+const examplePeriodInput = document.getElementById('examplePeriod');
+const exampleTipsInput = document.getElementById('exampleTips');
+const facilityList = document.getElementById('facilityList');
+const btnAddFacility = document.getElementById('btnAddFacility');
+const usageContent = document.getElementById('usageContent');
+const usageEmpty = document.getElementById('usageEmpty');
 let exampleTemplate = FALLBACK_SAMPLE;
 
-if (exampleInput) {
-  exampleInput.value = JSON.stringify(FALLBACK_SAMPLE, null, 2);
+let facilityCounter = 0;
+
+function hideUsageContent(){
+  if (usageContent) usageContent.hidden = true;
+  if (usageEmpty) usageEmpty.hidden = false;
 }
+
+function showUsageContent(){
+  if (usageContent) usageContent.hidden = false;
+  if (usageEmpty) usageEmpty.hidden = true;
+}
+
+function usageLinesFromArray(usage = []){
+  if (!Array.isArray(usage) || !usage.length) return '';
+  return usage.map(point => `${point.hour || ''}=${point.kwh ?? ''}`).join('\n');
+}
+
+function parseUsageLines(text){
+  return (text || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [hour, value] = line.split('=').map(part => part?.trim() || '');
+      if (!hour) return null;
+      const numeric = Number(value.replace(/[^0-9.+-]/g, ''));
+      return { hour, kwh: Number.isFinite(numeric) ? numeric : 0 };
+    })
+    .filter(Boolean);
+}
+
+function createFacilityCard(data = {}){
+  facilityCounter += 1;
+  const block = document.createElement('div');
+  block.className = 'facility-input-card';
+  block.dataset.facilityId = data.id || `facility-${Date.now()}-${facilityCounter}`;
+  block.innerHTML = `
+    <div class="facility-card-header">
+      <span>설비 ${facilityCounter}</span>
+      <button type="button" class="text-button" data-role="remove">삭제</button>
+    </div>
+    <div class="facility-card-grid">
+      <label>설비 이름
+        <input type="text" class="facility-name" placeholder="예: 서울 본사">
+      </label>
+      <label>분류
+        <input type="text" class="facility-category" placeholder="예: 오피스">
+      </label>
+      <label>기준 사용량(kWh)
+        <input type="number" class="facility-baseline" min="0" step="1" placeholder="예: 820">
+      </label>
+    </div>
+    <label>시간대별 사용량 (한 줄에 하나씩)
+      <textarea class="facility-usage-field" placeholder="예: 06:00=120\n09:00=180"></textarea>
+      <span class="hint">시간=사용량 형식으로 입력하면 자동 계산됩니다.</span>
+    </label>
+  `;
+  facilityList?.appendChild(block);
+  block.querySelector('.facility-name').value = data.name || '';
+  block.querySelector('.facility-category').value = data.category || '';
+  block.querySelector('.facility-baseline').value = data.baseline ?? '';
+  block.querySelector('.facility-usage-field').value = usageLinesFromArray(data.usage);
+  block.querySelector('[data-role="remove"]').addEventListener('click', () => {
+    if (!facilityList) return;
+    facilityList.removeChild(block);
+    if (!facilityList.children.length) {
+      createFacilityCard();
+    }
+  });
+  return block;
+}
+
+function fillExampleFormFromPayload(payload = FALLBACK_SAMPLE){
+  facilityCounter = 0;
+  if (examplePeriodInput) {
+    examplePeriodInput.value = payload.period || '';
+  }
+  if (exampleTipsInput) {
+    exampleTipsInput.value = Array.isArray(payload.tips) ? payload.tips.join('\n') : '';
+  }
+  if (facilityList) {
+    facilityList.innerHTML = '';
+    const facilities = Array.isArray(payload.facilities) && payload.facilities.length
+      ? payload.facilities
+      : [{}];
+    facilities.forEach(facility => createFacilityCard(facility));
+  }
+}
+
+function collectTips(){
+  return (exampleTipsInput?.value || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+function collectFacilities(){
+  if (!facilityList) return [];
+  return Array.from(facilityList.querySelectorAll('.facility-input-card')).map(card => ({
+    id: card.dataset.facilityId || `facility-${Date.now()}`,
+    name: card.querySelector('.facility-name')?.value?.trim() || '이름 미지정',
+    category: card.querySelector('.facility-category')?.value?.trim() || '기타',
+    baseline: Number(card.querySelector('.facility-baseline')?.value) || 0,
+    usage: parseUsageLines(card.querySelector('.facility-usage-field')?.value),
+  })).filter(facility => facility.usage.length);
+}
+
+function serializeExampleForm(){
+  return {
+    period: examplePeriodInput?.value?.trim() || '사용자 입력',
+    tips: collectTips(),
+    facilities: collectFacilities(),
+  };
+}
+
+function ensureFacilityInputs(){
+  if (facilityList && !facilityList.children.length) {
+    createFacilityCard();
+  }
+}
+
+fillExampleFormFromPayload(FALLBACK_SAMPLE);
+ensureFacilityInputs();
+hideUsageContent();
 
 const formatKwh = value => `${Math.round(Number(value || 0)).toLocaleString()} kWh`;
 const formatPercent = value => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -734,9 +956,10 @@ function setExampleStatus(message, variant = 'info') {
 }
 
 function applyUsagePayload(payload, { context = 'sample' } = {}) {
+  showUsageContent();
   const summary = summarizeUsageInput(payload);
   const labelBase = summary.period || (context === 'example' ? '사용자 입력 데이터' : '샘플 데이터');
-  const labelSuffix = context === 'example' ? ' · 사용자 입력' : ' 기준 샘플';
+  const labelSuffix = context === 'example' ? '' : ' · 참조용';
   document.getElementById('usagePeriod').textContent = `${labelBase}${labelSuffix}`;
   renderUsageKpis(summary.insights || {});
   renderUsageChart(summary.timeline || []);
@@ -755,32 +978,36 @@ async function fetchUsageInsights(){
       tips: data.tips || []
     };
     exampleTemplate = basePayload;
-    if (exampleInput) {
-      exampleInput.value = JSON.stringify(basePayload, null, 2);
-    }
-    applyUsagePayload(basePayload, { context: 'sample' });
-    setExampleStatus('샘플 데이터를 불러와 입력창에 채웠습니다.');
+    fillExampleFormFromPayload(basePayload);
+    setExampleStatus('샘플 데이터를 입력창에 채웠습니다. 수정 후 인사이트 보기 버튼을 눌러주세요.');
+    hideUsageContent();
   } catch (e) {
     console.error(e);
-    setExampleStatus('샘플 데이터를 불러오지 못해 기본 예시를 사용합니다.', 'error');
-    applyUsagePayload(exampleTemplate || FALLBACK_SAMPLE, { context: 'sample' });
+    exampleTemplate = FALLBACK_SAMPLE;
+    fillExampleFormFromPayload(exampleTemplate);
+    setExampleStatus('샘플 데이터를 불러오지 못해 기본 예시를 사용합니다. 내용을 확인한 뒤 버튼을 눌러주세요.', 'error');
+    hideUsageContent();
   }
 }
 function handleExampleApply(){
-  if (!exampleInput) return;
   try {
-    const payload = JSON.parse(exampleInput.value || '{}');
+    const payload = serializeExampleForm();
+    if (!payload.facilities.length) {
+      setExampleStatus('시간대별 사용량을 한 줄 이상 입력해주세요.', 'error');
+      return;
+    }
     applyUsagePayload(payload, { context: 'example' });
     setExampleStatus('입력한 값으로 인사이트를 계산했습니다.');
   } catch (err) {
     console.error(err);
-    setExampleStatus('JSON 형식이 올바르지 않습니다. 다시 확인해주세요.', 'error');
+    setExampleStatus('입력값을 읽는 중 오류가 발생했습니다. 다시 확인해주세요.', 'error');
   }
 }
 
 function handleExampleFill(){
-  if (!exampleInput) return;
-  exampleInput.value = JSON.stringify(exampleTemplate || FALLBACK_SAMPLE, null, 2);
+  fillExampleFormFromPayload(exampleTemplate || FALLBACK_SAMPLE);
+  ensureFacilityInputs();
+  hideUsageContent();
   setExampleStatus('예시 입력 값으로 채웠습니다. 수정 후 적용 버튼을 눌러주세요.');
 }
 
@@ -1132,6 +1359,7 @@ function setMode(mode){
 btnIndustry.onclick = ()=> setMode('industry');
 btnBizType.onclick  = ()=> setMode('biztype');
 btnMap.onclick      = ()=> setMode('map');
+btnAddFacility?.addEventListener('click', () => createFacilityCard());
 btnExampleApply?.addEventListener('click', handleExampleApply);
 btnExampleFill?.addEventListener('click', handleExampleFill);
 document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
