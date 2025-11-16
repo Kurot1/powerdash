@@ -1,394 +1,622 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>전력 사용량 대시보드</title>
+  <meta charset="UTF-8" />
+  <title>전력 사용량 대시보드 — Neon Pro</title>
+
+  <!-- 외부 라이브러리 -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
   <style>
-    body { font-family: ui-sans-serif,system-ui,AppleSDGothicNeo,Malgun Gothic,sans-serif; margin: 24px; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-    input, select, button { padding:8px 10px; font-size:14px; }
-    button.primary { background:#111827; color:#fff; border:0; border-radius:6px; }
-    button.ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:6px; }
-    #chart { width: 100%; height: 600px; margin-top: 12px; }
-    #mapChart { width: 100%; height: 600px; margin-top: 24px; }
-    .hint { color:#6b7280; font-size:12px; margin-left:4px; }
-    .row strong { font-size:16px; }
+    /* =========================
+       다크 네온 블루 테마 스타일
+       ========================= */
+    :root{
+      --bg          : #071026; /* 아주 짙은 네이비/블랙 */
+      --panel       : linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      --card        : rgba(255,255,255,0.03);
+      --glass       : rgba(255,255,255,0.03);
+      --muted       : #93a5c6;
+      --text        : #e6f0ff;
+      --accent      : #00b7ff; /* 네온 블루 */
+      --accent-2    : #5af6d6; /* 민트 포인트 */
+      --danger      : #ff6b6b;
+      --radius      : 12px;
+      --shadow      : 0 10px 30px rgba(2,6,23,0.75), inset 0 1px 0 rgba(255,255,255,0.02);
+      --glass-border: rgba(255,255,255,0.04);
+      --small      : 13px;
+      --base       : 15px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter, ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      background: radial-gradient(1200px 600px at 10% 10%, rgba(0,183,255,0.04), transparent),
+                  radial-gradient(1000px 500px at 90% 90%, rgba(90,246,214,0.02), transparent),
+                  var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding:24px;
+    }
+
+    /* header */
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:18px 24px;
+      border-radius:14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.012));
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--shadow);
+      margin-bottom:20px;
+      backdrop-filter: blur(6px) saturate(1.2);
+    }
+    header .title {
+      display:flex;
+      gap:14px;
+      align-items:center;
+    }
+    .logo {
+      width:46px; height:46px; border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      background: linear-gradient(135deg, rgba(0,183,255,0.12), rgba(90,246,214,0.06));
+      border:1px solid rgba(0,183,255,0.14);
+      box-shadow: 0 6px 18px rgba(0,183,255,0.06);
+      font-weight:700;
+      color:var(--accent);
+      font-size:18px;
+    }
+    header h1{
+      margin:0; font-size:18px; letter-spacing: -0.2px;
+    }
+    header p { margin:0; color:var(--muted); font-size:13px }
+
+    /* layout */
+    main {
+      width: 100%;
+      max-width:1300px;
+      margin:0 auto;
+      display:block;
+      grid-template-columns: 360px 1fr;
+      gap:20px;
+      align-items:start;
+    }
+
+    /* left panel (controls) */
+    .panel {
+      width: 100%;
+      background:var(--card);
+      border-radius:var(--radius);
+      padding:18px;
+      border:1px solid var(--glass-border);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      min-height:420px;
+      margin-bottom: 20px;
+    }
+    .panel .section-title{
+      font-weight:700;
+      font-size:13px;
+      color:var(--text);
+      margin-bottom:12px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:8px;
+    }
+    .muted { color:var(--muted); font-size:13px; }
+
+    .control-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+    label { display:flex; flex-direction:column; color:var(--muted); font-size:12px; gap:6px; }
+    input[type="text"], input[type="number"], select{
+      background: rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.04);
+      padding:10px 12px;
+      border-radius:10px;
+      color:var(--text);
+      font-size:14px;
+      min-width:120px;
+      outline:none;
+      transition: all .12s ease;
+      box-shadow: none;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus{
+      box-shadow: 0 6px 20px rgba(0,183,255,0.07);
+      border-color: rgba(0,183,255,0.9);
+    }
+
+    /* mode buttons */
+    .modes { display:flex; gap:8px; margin-top:6px; }
+    .mode-btn{
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.04);
+      cursor:pointer;
+      background: transparent;
+      color:var(--text);
+      font-weight:600;
+      font-size:13px;
+      transition: all .12s ease;
+      display:inline-flex; align-items:center; gap:8px;
+    }
+    /* 기존 .mode-btn.primary/.ghost 유지 */
+.mode-btn.primary {
+  background: linear-gradient(90deg, rgba(0,183,255,0.12), rgba(90,246,214,0.06));
+  border: 1px solid rgba(0,183,255,0.28);
+  box-shadow: 0 8px 24px rgba(0,183,255,0.06);
+  color: var(--accent);
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.mode-btn.ghost {
+  background: transparent;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+/* 지도보기 버튼만 크게 강조 */
+.btn-map {
+  background: #00b7ff;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;       /* 글씨 조금 더 큼 */
+  padding: 12px 22px;    /* 버튼 전체 크기 더 큼 */
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-map:hover {
+  background: #0096e6;
+  transform: scale(1.03);
+}
+
+
+    /* cards on right */
+    .canvas {
+      display:flex; flex-direction:column; gap:18px;
+      width: 100%;
+    }
+    .card {
+      width: 100%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:16px;
+      border:1px solid var(--glass-border);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+
+    /* mini stat */
+    .stat-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:6px; }
+    .stat {
+      padding:12px; border-radius:12px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+      border: 1px solid rgba(255,255,255,0.02);
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .stat .label { color:var(--muted); font-size:12px; }
+    .stat .value { font-weight:800; color:var(--text); font-size:18px; }
+
+    /* chart container */
+    #chart {
+  width: 100%;      /* 너비를 화면 전체로 */
+  height: 70vh;     /* 높이는 화면 비율로 자동 조절 */
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(2,8,22,0.55), rgba(2,8,22,0.45));
+  border: 1px solid rgba(255,255,255,0.02);
+}
+
+
+    /* footer small hints */
+    .hint { color:var(--muted); font-size:12px; margin-top:8px; }
+
+    /* responsive */
+    @media (max-width:1100px){
+      main { grid-template-columns: 1fr; padding:16px; }
+      #chart { height:520px; }
+      .stat-grid { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width:600px){
+      header { flex-direction:column; align-items:flex-start; gap:8px; }
+      .stat-grid { grid-template-columns: 1fr; }
+    }
+
+    /* small utility */
+    .right { margin-left:auto; }
+    .tiny { font-size:12px; color:var(--muted) }
+
+    /* subtle neon accent for x-axis labels overflow */
+    .chip {
+      background: rgba(0,183,255,0.06);
+      border: 1px solid rgba(0,183,255,0.12);
+      padding:6px 10px; border-radius:999px; color:var(--accent);
+      font-weight:700; font-size:13px;
+    }
+
+    /* hidden option fallback: option doesn't support style across browsers consistently,
+       so we will hide by removing the option node when needed (JS handles it). */
+
+       /* select 기본 스타일 */
+select {
+  background: rgba(0,0,0,0.3); /* 진한 배경 */
+  color: #ffffff;              /* 글씨 흰색 */
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.12s ease;
+}
+
+/* 선택된 옵션 */
+select option {
+  background: #1c1f26; /* 옵션 배경 어둡게 */
+  color: #ffffff;       /* 글씨 흰색 */
+}
+
+/* hover / focus 효과 */
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 6px 20px rgba(0,183,255,0.2);
+}
+select option:hover {
+  background: #2a2e36;
+}
+
   </style>
 </head>
 <body>
-  <h2>📊 전력 사용량 대시보드</h2>
+  <header>
+    <h2>전력 소비량 대시보드</h2>
+  </header>
 
-  <!-- 공통 입력 -->
-  <div class="row">
-    <label>연도 <input id="year" type="text" placeholder="예: 2020" value="2020"></label>
-    <label>월 <input id="month" type="text" placeholder="예: 11" value="11"></label>
-    <select id="metric">
-      <option value="kwh" selected>kWh(전력사용량)</option>
-      <option value="bill">요금(원)</option>
-    </select>
-    <button class="primary" id="btnIndustry">산업분류 Top-N</button>
-    <button class="ghost" id="btnBizType">업종별(시군구)</button>
-  </div>
+  <main>
+    <!-- 상단 모드 선택 -->
+    <div class="toolbar">
+      <label>연도
+        <input id="year" type="text" placeholder="예: 2020" value="2020">
+      </label>
+      <label>월
+        <input id="month" type="text" placeholder="예: 11" value="11">
+      </label>
+      <label id="metricLabel">지표
+        <div style="display:flex; gap:8px; align-items:flex-end;">
+        <button class="mode-btn primary" id="btnIndustry">산업분류 Top-N</button>
+        <button class="mode-btn ghost" id="btnBizType">업종별(시군구)</button>
+        <button class="btn-map" id="btnMap">🗺 지도보기</button>
+      </div>
+        <select id="metric">
+          <option value="kwh" selected>kWh(전력소비량)</option>
+          <option value="bill">요금(원)</option>
+        </select>
+      </label>
+    </div>
 
-  <!-- 산업분류 Top-N -->
-  <div class="row" id="industryRow">
-    <label>Top N <input id="topN" type="number" min="3" max="30" value="10" style="width:80px"></label>
+    <!-- 산업분류 Top-N -->
+    <div class="card" id="industryRow">
+      <div class="section-title">산업분류 Top-N 조회</div>
+      <div class="toolbar">
+        <label>Top N
+          <input id="topN" type="number" min="3" max="30" value="10" style="width:80px">
+        </label>
+        <label>시도
+          <select id="metroSel">
+            <option value="">전체(선택 안함)</option>
+            <option value="11">서울특별시</option>
+            <option value="26">부산광역시</option>
+            <option value="27">대구광역시</option>
+            <option value="28">인천광역시</option>
+            <option value="29">광주광역시</option>
+            <option value="30">대전광역시</option>
+            <option value="31">울산광역시</option>
+            <option value="36">세종특별자치시</option>
+            <option value="41">경기도</option>
+            <option value="42">강원특별자치도</option>
+            <option value="43">충청북도</option>
+            <option value="44">충청남도</option>
+            <option value="45">전북특별자치도</option>
+            <option value="46">전라남도</option>
+            <option value="47">경상북도</option>
+            <option value="48">경상남도</option>
+            <option value="50">제주특별자치도</option>
+          </select>
+        </label>
+        <label>시군구
+          <select id="citySel" disabled>
+            <option value="">전체(선택 안함)</option>
+          </select>
+        </label>
+        <button class="primary" id="btnIndustryLoad">불러오기</button>
+      </div>
+    </div>
 
-    <!-- metroCd 선택 -->
-    <label>시도
-      <select id="metroSel">
-        <option value="">전체(선택 안함)</option>
-        <option value="11">서울특별시</option>
-        <option value="26">부산광역시</option>
-        <option value="27">대구광역시</option>
-        <option value="28">인천광역시</option>
-        <option value="29">광주광역시</option>
-        <option value="30">대전광역시</option>
-        <option value="31">울산광역시</option>
-        <option value="36">세종특별자치시</option>
-        <option value="41">경기도</option>
-        <option value="42">강원특별자치도</option>
-        <option value="43">충청북도</option>
-        <option value="44">충청남도</option>
-        <option value="45">전북특별자치도</option>
-        <option value="46">전라남도</option>
-        <option value="47">경상북도</option>
-        <option value="48">경상남도</option>
-        <option value="50">제주특별자치도</option>
-      </select>
-    </label>
+    <!-- 업종별(시군구) -->
+    <div class="card" id="biztypeRow" style="display:none">
+      <div class="section-title">업종별(시군구) 조회</div>
+      <div class="toolbar">
+        <label>시도
+          <select id="metroSel2">
+            <option value="">시도 선택</option>
+            <option value="11">서울특별시</option>
+            <option value="26">부산광역시</option>
+            <option value="27">대구광역시</option>
+            <option value="28">인천광역시</option>
+            <option value="29">광주광역시</option>
+            <option value="30">대전광역시</option>
+            <option value="31">울산광역시</option>
+            <option value="36">세종특별자치시</option>
+            <option value="41">경기도</option>
+            <option value="42">강원특별자치도</option>
+            <option value="43">충청북도</option>
+            <option value="44">충청남도</option>
+            <option value="45">전북특별자치도</option>
+            <option value="46">전라남도</option>
+            <option value="47">경상북도</option>
+            <option value="48">경상남도</option>
+            <option value="50">제주특별자치도</option>
+          </select>
+        </label>
+        <label>시군구
+          <select id="citySel2" disabled>
+            <option value="">시군구 선택</option>
+          </select>
+        </label>
+        <button class="primary" id="btnBizLoad">불러오기</button>
+      </div>
+    </div>
 
-    <!-- 시군구(이름) 선택 -->
-    <label>시군구
-      <select id="citySel" disabled>
-        <option value="">전체(선택 안함)</option>
-      </select>
-    </label>
+    <div id="chart"></div>
+  </main>
 
-    <button class="primary" id="btnIndustryLoad">불러오기</button>
-  </div>
+<script>
+const chart = echarts.init(document.getElementById('chart'));
+const z2 = (m)=>String(m??'').padStart(2,'0');
+const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
+const metricKey = ()=>metric.value;
 
-  <!-- 업종별(시군구) -->
-  <div class="row" id="biztypeRow" style="display:none">
-    <label>시도
-      <select id="metroSel2">
-        <option value="">시도 선택</option>
-        <option value="11">서울특별시</option>
-        <option value="26">부산광역시</option>
-        <option value="27">대구광역시</option>
-        <option value="28">인천광역시</option>
-        <option value="29">광주광역시</option>
-        <option value="30">대전광역시</option>
-        <option value="31">울산광역시</option>
-        <option value="36">세종특별자치시</option>
-        <option value="41">경기도</option>
-        <option value="42">강원특별자치도</option>
-        <option value="43">충청북도</option>
-        <option value="44">충청남도</option>
-        <option value="45">전북특별자치도</option>
-        <option value="46">전라남도</option>
-        <option value="47">경상북도</option>
-        <option value="48">경상남도</option>
-        <option value="50">제주특별자치도</option>
-      </select>
-    </label>
-
-    <label>시군구
-      <select id="citySel2" disabled>
-        <option value="">시군구 선택</option>
-      </select>
-    </label>
-
-    <label>업종명(선택) <input id="bizType" type="text" placeholder="예: 섬유"></label>
-    <button class="primary" id="btnBizLoad">불러오기</button>
-  </div>
-
-  <!-- 제조업 지도 -->
-  <div class="row" id="manuMapRow">
-    <strong>행정구역 제조업 지도</strong>
-    <span class="hint">행정구역에 마우스를 올리면 제조업 전력사용량을 확인할 수 있어요.</span>
-    <label>시도
-      <select id="mapMetroSel">
-        <option value="">시도 선택</option>
-        <option value="11">서울특별시</option>
-        <option value="26">부산광역시</option>
-        <option value="27">대구광역시</option>
-        <option value="28">인천광역시</option>
-        <option value="29">광주광역시</option>
-        <option value="30">대전광역시</option>
-        <option value="31">울산광역시</option>
-        <option value="36">세종특별자치시</option>
-        <option value="41">경기도</option>
-        <option value="42">강원특별자치도</option>
-        <option value="43">충청북도</option>
-        <option value="44">충청남도</option>
-        <option value="45">전북특별자치도</option>
-        <option value="46">전라남도</option>
-        <option value="47">경상북도</option>
-        <option value="48">경상남도</option>
-        <option value="50">제주특별자치도</option>
-      </select>
-    </label>
-    <button class="primary" id="btnMapLoad">지도 불러오기</button>
-  </div>
-
-  <div id="mapChart"></div>
-  <div id="chart"></div>
-
-  <script>
-    const chart = echarts.init(document.getElementById('chart'));
-    const mapChart = echarts.init(document.getElementById('mapChart'));
-    const z2 = (m)=>String(m??'').padStart(2,'0');
-    const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
-    const metricKey = ()=>metric.value;
-
-    const metroMap = {
-      "11":"서울특별시","26":"부산광역시","27":"대구광역시","28":"인천광역시","29":"광주광역시","30":"대전광역시","31":"울산광역시","36":"세종특별자치시",
-      "41":"경기도","42":"강원특별자치도","43":"충청북도","44":"충청남도","45":"전북특별자치도","46":"전라남도","47":"경상북도","48":"경상남도","50":"제주특별자치도"
-    };
-
-    const metroGeoMeta = {
-      "11":{ name: metroMap["11"], file:"hangjeongdong_서울특별시.json", mapKey:"hangjeong-11" },
-      "26":{ name: metroMap["26"], file:"hangjeongdong_부산광역시.json", mapKey:"hangjeong-26" },
-      "27":{ name: metroMap["27"], file:"hangjeongdong_대구광역시.json", mapKey:"hangjeong-27" },
-      "28":{ name: metroMap["28"], file:"hangjeongdong_인천광역시.json", mapKey:"hangjeong-28" },
-      "29":{ name: metroMap["29"], file:"hangjeongdong_광주광역시.json", mapKey:"hangjeong-29" },
-      "30":{ name: metroMap["30"], file:"hangjeongdong_대전광역시.json", mapKey:"hangjeong-30" },
-      "31":{ name: metroMap["31"], file:"hangjeongdong_울산광역시.json", mapKey:"hangjeong-31" },
-      "36":{ name: metroMap["36"], file:"hangjeongdong_세종특별자치시.json", mapKey:"hangjeong-36" },
-      "41":{ name: metroMap["41"], file:"hangjeongdong_경기도.json", mapKey:"hangjeong-41" },
-      "42":{ name: metroMap["42"], file:"hangjeongdong_강원도.json", mapKey:"hangjeong-42" },
-      "43":{ name: metroMap["43"], file:"hangjeongdong_충청북도.json", mapKey:"hangjeong-43" },
-      "44":{ name: metroMap["44"], file:"hangjeongdong_충청남도.json", mapKey:"hangjeong-44" },
-      "45":{ name: metroMap["45"], file:"hangjeongdong_전라북도.json", mapKey:"hangjeong-45" },
-      "46":{ name: metroMap["46"], file:"hangjeongdong_전라남도.json", mapKey:"hangjeong-46" },
-      "47":{ name: metroMap["47"], file:"hangjeongdong_경상북도.json", mapKey:"hangjeong-47" },
-      "48":{ name: metroMap["48"], file:"hangjeongdong_경상남도.json", mapKey:"hangjeong-48" },
-      "50":{ name: metroMap["50"], file:"hangjeongdong_제주특별자치도.json", mapKey:"hangjeong-50" }
-    };
-
-    const geoCache = {};
-
-    async function loadGeoJson(metroCd){
-      if(geoCache[metroCd]) return geoCache[metroCd];
-      const meta = metroGeoMeta[metroCd];
-      if(!meta) throw new Error('해당 시도의 지도 데이터를 찾을 수 없습니다.');
-      const resp = await fetch(`/hangjeongdong/${meta.file}`);
-      if(!resp.ok) throw new Error('지도 파일을 불러오지 못했습니다.');
-      const data = await resp.json();
-      geoCache[metroCd] = data;
-      return data;
+/* -------------------------------
+   산업/업종 데이터 불러오기
+--------------------------------*/
+async function loadCitiesTo(selectEl, metroCd) {
+  selectEl.innerHTML = '<option value="">전체(선택 안함)</option>';
+  selectEl.disabled = true;
+  if (!metroCd) return;
+  const {year, month} = getYM();
+  try {
+    const res = await axios.get(`/api/cities?year=${year}&month=${month}&metroCd=${metroCd}`);
+    const cities = Array.isArray(res.data) ? res.data : [];
+    for (const name of cities) {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      selectEl.appendChild(opt);
     }
+    selectEl.disabled = false;
+  } catch (e) { console.error(e); }
+}
 
-    async function loadManufacturingMap(){
-      const {year,month}=getYM();
-      const metroCd=mapMetroSel.value;
-      if(!metroCd){ alert('시도를 선택하세요'); return; }
-      const meta = metroGeoMeta[metroCd];
-      if(!meta){ alert('해당 시도의 지도 정보를 찾을 수 없습니다.'); return; }
+async function loadIndustryTop(){
+  const {year,month}=getYM();
+  const metroCd=metroSel.value;
+  const cityName=citySel.value;
 
-      mapChart.showLoading('default',{text:'불러오는 중...'});
-      try {
-        const [geoJson,res] = await Promise.all([
-          loadGeoJson(metroCd),
-          axios.get(`/api/manufacturing/map?year=${year}&month=${month}&metroCd=${metroCd}`)
-        ]);
+  if(!metroCd || !cityName){ 
+    alert('시도와 시군구를 선택하세요'); 
+    return; 
+  }
 
-        echarts.registerMap(meta.mapKey, geoJson);
-        const items = Array.isArray(res.data?.items)?res.data.items:[];
+  const limit=Number(topN.value||10);
+  const qs=new URLSearchParams({year,month,limit});
+  qs.set('metroCd', metroCd);
+  qs.set('city', cityName);
 
-        if(!items.length){
-          mapChart.hideLoading();
-          mapChart.clear();
-          mapChart.setOption({title:{text:'데이터 없음',left:'center',top:'middle'}});
-          return;
-        }
+  const res=await axios.get(`/api/industry/top?${qs}`);
+  const rows=Array.isArray(res.data)?res.data:[];      
+  if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
 
-        const valueByCity={};
-        items.forEach(item=>{
-          const city=(item.city||'').trim();
-          if(!city) return;
-          const val=Number(item.kwh ?? item.powerUsage ?? 0);
-          if(Number.isNaN(val)) return;
-          valueByCity[city]=(valueByCity[city]||0)+val;
-        });
+  const key=metricKey();
+  const labels=rows.map(r=>r.biz||'(미분류)');
+  const values=rows.map(r=>Number(r[key] ?? r.powerUsage ?? 0));
+  renderBar(`${year}년 ${month}월 산업분류 Top-${limit}${cityName? ' - '+cityName:''}`,labels,values,key);
+}
 
-        const seriesData=(geoJson.features||[]).map(f=>{
-          const props=f.properties||{};
-          const city=(props.sggnm||props.sig_kor_nm||'').trim();
-          const fallback=(props.adm_nm||'').trim();
-          const key=city||fallback;
-          const val = city && valueByCity[city]!=null ? valueByCity[city] : null;
-          return { name: key, value: val, cityName: city||fallback || '알수없음' };
-        });
-        const values=seriesData.map(d=>d.value).filter(v=>typeof v==='number' && !Number.isNaN(v));
-        const maxVal=values.length?Math.max(...values):0;
+async function loadBizType(){
+  const {year,month}=getYM();
+  const metroCd=metroSel2.value;
+  const cityName=citySel2.value;
+  if(!metroCd || !cityName){ alert('시도와 시군구를 선택하세요'); return; }
 
-        mapChart.hideLoading();
-        mapChart.setOption({
-          title:{text:`${year}년 ${month}월 제조업 전력사용량 (${meta.name})`,left:'center'},
-          tooltip:{
-            trigger:'item',
-            formatter:params=>{
-              const city=params.data?.cityName || params.name;
-              const value=params.value;
-              if(value==null || Number.isNaN(value)) return `${city}: 데이터 없음`;
-              return `${city}: ${Number(value).toLocaleString()} kWh`;
-            }
-          },
-          visualMap: values.length ? {
-            min:0,
-            max:maxVal || 1,
-            left:10,
-            bottom:20,
-            text:['많음','적음'],
-            calculable:true,
-            inRange:{ color:['#dbeafe','#3b82f6'] }
-          } : { show:false },
-          series:[{
-            name:'제조업',
-            type:'map',
-            map:meta.mapKey,
-            roam:true,
-            label:{ show:false },
-            data:seriesData,
-            emphasis:{ label:{ show:true }, itemStyle:{ areaColor:'#2563eb' } }
-          }]
-        });
-      } catch (e) {
-        console.error(e);
-        mapChart.hideLoading();
-        alert('제조업 지도 데이터를 불러오지 못했습니다.');
-      }
+  const metroMap = {
+    "11":"서울특별시","26":"부산광역시","27":"대구광역시","28":"인천광역시","29":"광주광역시","30":"대전광역시","31":"울산광역시","36":"세종특별자치시",
+    "41":"경기도","42":"강원특별자치도","43":"충청북도","44":"충청남도","45":"전북특별자치도","46":"전라남도","47":"경상북도","48":"경상남도","50":"제주특별자치도"
+  };
+  const metroName = metroMap[metroCd];
+
+  const qs=new URLSearchParams({year,month,metro:metroName,city:cityName});
+  const res=await axios.get(`/api/biztype?${qs}`);
+  const rows=Array.isArray(res.data)?res.data:[]; 
+  if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
+
+  const key=metricKey();
+  const agg={};
+  rows.forEach(r=>{
+    const n=r.bizType||'(미분류)';
+    let val = 0;
+    if (key === 'bill') {
+      const raw = r.bill ?? r.charge ?? r.value ?? 0;
+      val = Number(String(raw).replace(/,/g,'')) || 0;
+    } else {
+      const raw = r.powerUsage ?? r.kwh ?? 0;
+      val = Number(String(raw).replace(/,/g,'')) || 0;
     }
+    agg[n] = (agg[n] || 0) + val;
+  });
 
-    // 시군구 목록 로드 (이름 배열)
-    async function loadCitiesTo(selectEl, metroCd) {
-      selectEl.innerHTML = '<option value="">전체(선택 안함)</option>';
-      selectEl.disabled = true;
-      if (!metroCd) return;
-      const {year, month} = getYM();
-      try {
-        const res = await axios.get(`/api/cities?year=${year}&month=${month}&metroCd=${metroCd}`);
-        const cities = Array.isArray(res.data) ? res.data : [];
-        for (const name of cities) {
-          const opt = document.createElement('option');
-          opt.value = name; opt.textContent = name;
-          selectEl.appendChild(opt);
-        }
-        selectEl.disabled = false;
-      } catch (e) {
-        console.error(e);
-      }
-    }
+  const labels = Object.keys(agg);
+  const values = labels.map(k => agg[k]);
+  renderBar(`${year}년 ${month}월 업종별 (${metroName} ${cityName})`, labels, values, key);
+}
 
-    // 산업분류 Top-N
-    async function loadIndustryTop(){
-      const {year,month}=getYM();
-      const metroCd=metroSel.value; // 코드
-      const cityName=citySel.value;  // 이름(선택 안 하면 빈)
-      const limit=Number(topN.value||10);
-      const qs=new URLSearchParams({year,month,limit});
-      if(metroCd) qs.set('metroCd', metroCd);
-      if(cityName) qs.set('city', cityName); // 이름 필터
+/* -------------------------------
+   막대차트 렌더링
+--------------------------------*/
+function renderBar(title,labels,values,key){
+  chart.setOption({
+    title: {
+      text: title,
+      left: 'center',
+      textStyle: { color: '#ffffff', fontWeight:'600' }
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      textStyle: { color: '#ffffff' },
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      valueFormatter: v => key==='bill'?`${v.toLocaleString()} 원`:`${v.toLocaleString()} kWh`
+    },
+    grid: { left:60, right:20, top:60, bottom:80 },
+    xAxis: {
+      type:'category',
+      data: labels,
+      axisLabel: { interval:0, rotate:30, color:'#ffffff' },
+      axisLine: { lineStyle:{ color:'#ffffff' } },
+      axisTick: { lineStyle:{ color:'#ffffff' } }
+    },
+    yAxis: {
+      type:'value',
+      name: key==='bill'?'원':'kWh',
+      nameTextStyle: { color:'#ffffff' },
+      axisLabel: { color:'#ffffff' },
+      axisLine: { lineStyle:{ color:'#ffffff' } },
+      splitLine: { lineStyle:{ color:'rgba(255,255,255,0.1)' } }
+    },
+    series: [{
+      type:'bar',
+      data: values,
+      itemStyle: { color:'#2563eb' },
+      label: { show:false}
+    }]
+  });
+}
 
-      const res=await axios.get(`/api/industry/top?${qs}`);
-      const rows=Array.isArray(res.data)?res.data:[];
-      if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
+/* -------------------------------
+   지도 전체보기 렌더링
+--------------------------------*/
+async function renderMap(){
+  industryRow.style.display = '';   // 지도도 industryRow 영역 사용
+  biztypeRow.style.display = 'none';
 
-      const key=metricKey();
-      const labels=rows.map(r=>r.biz||'(미분류)');
-      const values=rows.map(r=>Number(r[key]||r.powerUsage||0));
-      renderBar(`${year}년 ${month}월 산업분류 Top-${limit}${cityName? ' - '+cityName:''}`,labels,values,key);
-    }
+  const titleEl = industryRow.querySelector('.section-title');
+  const toolbarEl = industryRow.querySelector('.toolbar');
 
-    // 업종별(시군구)
-    async function loadBizType(){
-      const {year,month}=getYM();
-      const metroCd=metroSel2.value;
-      const cityName=citySel2.value;
-      if(!metroCd || !cityName){ alert('시도와 시군구를 선택하세요'); return; }
+  titleEl.textContent = '🗺 전국 지도 보기';
+  toolbarEl.style.display = 'none';
+  metric.style.display = 'none';
 
-      const metroName = metroMap[metroCd];
+  chart.clear();
 
-      const bizType=bizTypeEl.value.trim();
-      const qs=new URLSearchParams({year,month,metro:metroName,city:cityName});
-      if(bizType) qs.set('bizType', bizType);
+  try {
+    // 로컬 GeoJSON 불러오기 (assets/korea.json)
+    const res = await axios.get('assets/korea.json');
+    echarts.registerMap('KOR', res.data);
 
-      const res=await axios.get(`/api/biztype?${qs}`);
-      const rows=Array.isArray(res.data)?res.data:[];
-      if(!rows.length){ chart.clear(); chart.setOption({title:{text:'데이터 없음'}}); return; }
+    chart.setOption({
+      tooltip: { trigger: 'item', formatter: '{b}' },
+      visualMap: {
+        min: 0,
+        max: 100,
+        left: 'left',
+        top: 'bottom',
+        text: ['많음','적음'],
+        calculable: true,
+        inRange: { color: ['#e0f3f8','#08589e'] }
+      },
+      series: [{
+        type: 'map',
+        map: 'KOR',
+        roam: true,
+        emphasis: { label: { show: true } },
+        data: []  // 실제 값이 있으면 [{name:'서울특별시', value:50}, ...]
+      }]
+    });
+  } catch(e) {
+    chart.setOption({ title:{text:'지도 데이터 로드 실패'} });
+    console.error(e);
+  }
+}
 
-      const key=metricKey();
-      const agg={};
-      rows.forEach(r=>{
-        const n=r.bizType||'(미분류)';
-        const val=(key==='bill'?Number(r.bill??0):Number(r.powerUsage??r.kwh??0));
-        agg[n]=(agg[n]||0)+val;
-      });
-      const labels=Object.keys(agg);
-      const values=labels.map(k=>agg[k]);
-      renderBar(`${year}년 ${month}월 업종별 (${metroName} ${cityName})`,labels,values,key);
-    }
+/* -------------------------------
+   DOM 요소
+--------------------------------*/
+const year=document.getElementById('year');
+const month=document.getElementById('month');
+const metric=document.getElementById('metric');
+const metricLabel=document.getElementById('metricLabel');
+const topN=document.getElementById('topN');
+const metroSel=document.getElementById('metroSel');
+const citySel=document.getElementById('citySel');
+const metroSel2=document.getElementById('metroSel2');
+const citySel2=document.getElementById('citySel2');
+const btnIndustry=document.getElementById('btnIndustry');
+const btnBizType=document.getElementById('btnBizType');
+const btnMap=document.getElementById('btnMap');
+const industryRow=document.getElementById('industryRow');
+const biztypeRow=document.getElementById('biztypeRow');
 
-    function renderBar(title,labels,values,key){
-      chart.setOption({
-        title:{text:title,left:'center'},
-        tooltip:{trigger:'axis', valueFormatter:v=>key==='bill'?`${v.toLocaleString()} 원`:`${v.toLocaleString()} kWh`},
-        grid:{left:60,right:20,top:60,bottom:80},
-        xAxis:{type:'category',data:labels,axisLabel:{interval:0,rotate:30}},
-        yAxis:{type:'value',name:key==='bill'?'원':'kWh'},
-        series:[{type:'bar',data:values}]
-      });
-    }
+/* -------------------------------
+   통합 모드 관리
+--------------------------------*/
+function setMode(mode){
+  btnIndustry.className = mode==='industry' ? 'primary' : 'ghost';
+  btnBizType.className  = mode==='biztype' ? 'primary' : 'ghost';
+  btnMap.className      = mode==='map' ? 'primary' : 'ghost';
 
-    // 요소 참조
-    const year=document.getElementById('year');
-    const month=document.getElementById('month');
-    const metric=document.getElementById('metric');
+  if(mode==='map'){
+    renderMap();
+  } else if(mode==='industry'){
+    industryRow.style.display = '';
+    biztypeRow.style.display = 'none';
 
-    // 산업분류용
-    const topN=document.getElementById('topN');
-    const metroSel=document.getElementById('metroSel');
-    const citySel=document.getElementById('citySel');
+    const titleEl = industryRow.querySelector('.section-title');
+    const toolbarEl = industryRow.querySelector('.toolbar');
 
-    // 업종별용
-    const metroSel2=document.getElementById('metroSel2');
-    const citySel2=document.getElementById('citySel2');
-    const bizTypeEl=document.getElementById('bizType');
+    titleEl.textContent = '산업분류 Top-N 조회';
+    toolbarEl.style.display = '';
+    metric.style.display = '';
+    const billOption = metric.querySelector('option[value="bill"]');
+    billOption.style.display = '';
+    chart.clear();
+  } else if(mode==='biztype'){
+    industryRow.style.display = 'none';
+    biztypeRow.style.display  = '';
+    const billOption = metric.querySelector('option[value="bill"]');
+    metric.value = 'kwh';
+    billOption.style.display = 'none';
+    chart.clear();
+  }
+}
 
-    // 지도용
-    const mapMetroSel=document.getElementById('mapMetroSel');
-    const btnMapLoad=document.getElementById('btnMapLoad');
+/* -------------------------------
+   이벤트
+--------------------------------*/
+btnIndustry.onclick = ()=> setMode('industry');
+btnBizType.onclick  = ()=> setMode('biztype');
+btnMap.onclick      = ()=> setMode('map');
+document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
+document.getElementById('btnBizLoad').onclick     = loadBizType;
+metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
+metroSel2.addEventListener('change', ()=> loadCitiesTo(citySel2, metroSel2.value));
 
-    // 버튼/모드 전환
-    const btnIndustry=document.getElementById('btnIndustry');
-    const btnBizType=document.getElementById('btnBizType');
-    const industryRow=document.getElementById('industryRow');
-    const biztypeRow=document.getElementById('biztypeRow');
+setMode('industry');
+</script>
 
-    function setMode(mode){
-      btnIndustry.className = mode==='industry'?'primary':'ghost';
-      btnBizType.className  = mode==='biztype'?'primary':'ghost';
-      industryRow.style.display = mode==='industry'?'':'none';
-      biztypeRow.style.display  = mode==='biztype'?'':'none';
-    }
 
-    // 이벤트 바인딩
-    btnIndustry.onclick = ()=> setMode('industry');
-    btnBizType.onclick  = ()=> setMode('biztype');
-    document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
-    document.getElementById('btnBizLoad').onclick     = loadBizType;
-    btnMapLoad.onclick = loadManufacturingMap;
 
-    // 시도 선택 → 시군구 목록 로드
-    metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
-    metroSel2.addEventListener('change', ()=> loadCitiesTo(citySel2, metroSel2.value));
-
-    // 초기 모드
-    setMode('industry');
-  </script>
 </body>
 </html>
