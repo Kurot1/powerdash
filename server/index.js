@@ -4,6 +4,31 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const { call } = require("./kepco"); // server/kepco.js 사용
+const manufacturingFallback = require("./data/manufacturing_fallback.json");
+
+const z2 = v => String(v ?? "").padStart(2, "0");
+
+function aggregateManufacturing(rows = []) {
+  const agg = {};
+  for (const row of rows) {
+    const biz = (row.biz || row.bizNm || "").trim();
+    if (!biz.includes("제조")) continue;
+    const city = (row.city || "").trim();
+    if (!city) continue;
+    const value = Number(row.powerUsage ?? row.powerUseage ?? 0);
+    agg[city] = (agg[city] || 0) + value;
+  }
+  return Object.entries(agg)
+    .map(([city, kwh]) => ({ city, kwh }))
+    .sort((a, b) => b.kwh - a.kwh);
+}
+
+function getManufacturingFallback(year, month, metroCd) {
+  const dataset = manufacturingFallback?.[metroCd];
+  if (!dataset) return null;
+  const key = `${year}-${z2(month)}`;
+  return dataset[key] || dataset.default || null;
+}
 
 const app = express();
 app.use(cors());
@@ -99,6 +124,42 @@ app.get("/api/biztype", async (req, res) => {
     });
 
     res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "server error" });
+  }
+});
+
+/**
+ * 제조업 지도 데이터 (시군구별 전력사용량)
+ * GET /api/manufacturing/map?year=YYYY&month=MM&metroCd=##
+ * 반환: { items: [{ city, kwh }], year, month, metroCd }
+ */
+app.get("/api/manufacturing/map", async (req, res) => {
+  try {
+    const { year, month, metroCd } = req.query;
+    if (!year || !month || !metroCd) {
+      return res.status(400).json({ error: "year, month, metroCd 필수" });
+    }
+
+    let items = [];
+    try {
+      const rows = await call("powerUsage/industryType", { year, month, metroCd });
+      items = aggregateManufacturing(rows);
+    } catch (err) {
+      const fallback = getManufacturingFallback(year, month, metroCd);
+      if (fallback) {
+        console.warn(
+          `[manufacturing-map] fallback dataset 사용 (${metroCd}, ${year}-${z2(month)})`,
+          err?.response?.data || err.message
+        );
+        items = fallback;
+      } else {
+        throw err;
+      }
+    }
+
+    res.json({ year, month, metroCd, items });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "server error" });

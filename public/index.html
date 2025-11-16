@@ -12,7 +12,9 @@
     button.primary { background:#111827; color:#fff; border:0; border-radius:6px; }
     button.ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; border-radius:6px; }
     #chart { width: 100%; height: 600px; margin-top: 12px; }
+    #mapChart { width: 100%; height: 600px; margin-top: 24px; }
     .hint { color:#6b7280; font-size:12px; margin-left:4px; }
+    .row strong { font-size:16px; }
   </style>
 </head>
 <body>
@@ -103,13 +105,164 @@
     <button class="primary" id="btnBizLoad">불러오기</button>
   </div>
 
+  <!-- 제조업 지도 -->
+  <div class="row" id="manuMapRow">
+    <strong>행정구역 제조업 지도</strong>
+    <span class="hint">행정구역에 마우스를 올리면 제조업 전력사용량을 확인할 수 있어요.</span>
+    <label>시도
+      <select id="mapMetroSel">
+        <option value="">시도 선택</option>
+        <option value="11">서울특별시</option>
+        <option value="26">부산광역시</option>
+        <option value="27">대구광역시</option>
+        <option value="28">인천광역시</option>
+        <option value="29">광주광역시</option>
+        <option value="30">대전광역시</option>
+        <option value="31">울산광역시</option>
+        <option value="36">세종특별자치시</option>
+        <option value="41">경기도</option>
+        <option value="42">강원특별자치도</option>
+        <option value="43">충청북도</option>
+        <option value="44">충청남도</option>
+        <option value="45">전북특별자치도</option>
+        <option value="46">전라남도</option>
+        <option value="47">경상북도</option>
+        <option value="48">경상남도</option>
+        <option value="50">제주특별자치도</option>
+      </select>
+    </label>
+    <button class="primary" id="btnMapLoad">지도 불러오기</button>
+  </div>
+
+  <div id="mapChart"></div>
   <div id="chart"></div>
 
   <script>
     const chart = echarts.init(document.getElementById('chart'));
+    const mapChart = echarts.init(document.getElementById('mapChart'));
     const z2 = (m)=>String(m??'').padStart(2,'0');
     const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
     const metricKey = ()=>metric.value;
+
+    const metroMap = {
+      "11":"서울특별시","26":"부산광역시","27":"대구광역시","28":"인천광역시","29":"광주광역시","30":"대전광역시","31":"울산광역시","36":"세종특별자치시",
+      "41":"경기도","42":"강원특별자치도","43":"충청북도","44":"충청남도","45":"전북특별자치도","46":"전라남도","47":"경상북도","48":"경상남도","50":"제주특별자치도"
+    };
+
+    const metroGeoMeta = {
+      "11":{ name: metroMap["11"], file:"hangjeongdong_서울특별시.json", mapKey:"hangjeong-11" },
+      "26":{ name: metroMap["26"], file:"hangjeongdong_부산광역시.json", mapKey:"hangjeong-26" },
+      "27":{ name: metroMap["27"], file:"hangjeongdong_대구광역시.json", mapKey:"hangjeong-27" },
+      "28":{ name: metroMap["28"], file:"hangjeongdong_인천광역시.json", mapKey:"hangjeong-28" },
+      "29":{ name: metroMap["29"], file:"hangjeongdong_광주광역시.json", mapKey:"hangjeong-29" },
+      "30":{ name: metroMap["30"], file:"hangjeongdong_대전광역시.json", mapKey:"hangjeong-30" },
+      "31":{ name: metroMap["31"], file:"hangjeongdong_울산광역시.json", mapKey:"hangjeong-31" },
+      "36":{ name: metroMap["36"], file:"hangjeongdong_세종특별자치시.json", mapKey:"hangjeong-36" },
+      "41":{ name: metroMap["41"], file:"hangjeongdong_경기도.json", mapKey:"hangjeong-41" },
+      "42":{ name: metroMap["42"], file:"hangjeongdong_강원도.json", mapKey:"hangjeong-42" },
+      "43":{ name: metroMap["43"], file:"hangjeongdong_충청북도.json", mapKey:"hangjeong-43" },
+      "44":{ name: metroMap["44"], file:"hangjeongdong_충청남도.json", mapKey:"hangjeong-44" },
+      "45":{ name: metroMap["45"], file:"hangjeongdong_전라북도.json", mapKey:"hangjeong-45" },
+      "46":{ name: metroMap["46"], file:"hangjeongdong_전라남도.json", mapKey:"hangjeong-46" },
+      "47":{ name: metroMap["47"], file:"hangjeongdong_경상북도.json", mapKey:"hangjeong-47" },
+      "48":{ name: metroMap["48"], file:"hangjeongdong_경상남도.json", mapKey:"hangjeong-48" },
+      "50":{ name: metroMap["50"], file:"hangjeongdong_제주특별자치도.json", mapKey:"hangjeong-50" }
+    };
+
+    const geoCache = {};
+
+    async function loadGeoJson(metroCd){
+      if(geoCache[metroCd]) return geoCache[metroCd];
+      const meta = metroGeoMeta[metroCd];
+      if(!meta) throw new Error('해당 시도의 지도 데이터를 찾을 수 없습니다.');
+      const resp = await fetch(`/hangjeongdong/${meta.file}`);
+      if(!resp.ok) throw new Error('지도 파일을 불러오지 못했습니다.');
+      const data = await resp.json();
+      geoCache[metroCd] = data;
+      return data;
+    }
+
+    async function loadManufacturingMap(){
+      const {year,month}=getYM();
+      const metroCd=mapMetroSel.value;
+      if(!metroCd){ alert('시도를 선택하세요'); return; }
+      const meta = metroGeoMeta[metroCd];
+      if(!meta){ alert('해당 시도의 지도 정보를 찾을 수 없습니다.'); return; }
+
+      mapChart.showLoading('default',{text:'불러오는 중...'});
+      try {
+        const [geoJson,res] = await Promise.all([
+          loadGeoJson(metroCd),
+          axios.get(`/api/manufacturing/map?year=${year}&month=${month}&metroCd=${metroCd}`)
+        ]);
+
+        echarts.registerMap(meta.mapKey, geoJson);
+        const items = Array.isArray(res.data?.items)?res.data.items:[];
+
+        if(!items.length){
+          mapChart.hideLoading();
+          mapChart.clear();
+          mapChart.setOption({title:{text:'데이터 없음',left:'center',top:'middle'}});
+          return;
+        }
+
+        const valueByCity={};
+        items.forEach(item=>{
+          const city=(item.city||'').trim();
+          if(!city) return;
+          const val=Number(item.kwh ?? item.powerUsage ?? 0);
+          if(Number.isNaN(val)) return;
+          valueByCity[city]=(valueByCity[city]||0)+val;
+        });
+
+        const seriesData=(geoJson.features||[]).map(f=>{
+          const props=f.properties||{};
+          const city=(props.sggnm||props.sig_kor_nm||'').trim();
+          const fallback=(props.adm_nm||'').trim();
+          const key=city||fallback;
+          const val = city && valueByCity[city]!=null ? valueByCity[city] : null;
+          return { name: key, value: val, cityName: city||fallback || '알수없음' };
+        });
+        const values=seriesData.map(d=>d.value).filter(v=>typeof v==='number' && !Number.isNaN(v));
+        const maxVal=values.length?Math.max(...values):0;
+
+        mapChart.hideLoading();
+        mapChart.setOption({
+          title:{text:`${year}년 ${month}월 제조업 전력사용량 (${meta.name})`,left:'center'},
+          tooltip:{
+            trigger:'item',
+            formatter:params=>{
+              const city=params.data?.cityName || params.name;
+              const value=params.value;
+              if(value==null || Number.isNaN(value)) return `${city}: 데이터 없음`;
+              return `${city}: ${Number(value).toLocaleString()} kWh`;
+            }
+          },
+          visualMap: values.length ? {
+            min:0,
+            max:maxVal || 1,
+            left:10,
+            bottom:20,
+            text:['많음','적음'],
+            calculable:true,
+            inRange:{ color:['#dbeafe','#3b82f6'] }
+          } : { show:false },
+          series:[{
+            name:'제조업',
+            type:'map',
+            map:meta.mapKey,
+            roam:true,
+            label:{ show:false },
+            data:seriesData,
+            emphasis:{ label:{ show:true }, itemStyle:{ areaColor:'#2563eb' } }
+          }]
+        });
+      } catch (e) {
+        console.error(e);
+        mapChart.hideLoading();
+        alert('제조업 지도 데이터를 불러오지 못했습니다.');
+      }
+    }
 
     // 시군구 목록 로드 (이름 배열)
     async function loadCitiesTo(selectEl, metroCd) {
@@ -158,11 +311,6 @@
       const cityName=citySel2.value;
       if(!metroCd || !cityName){ alert('시도와 시군구를 선택하세요'); return; }
 
-      // 코드→이름 매핑
-      const metroMap = {
-        "11":"서울특별시","26":"부산광역시","27":"대구광역시","28":"인천광역시","29":"광주광역시","30":"대전광역시","31":"울산광역시","36":"세종특별자치시",
-        "41":"경기도","42":"강원특별자치도","43":"충청북도","44":"충청남도","45":"전북특별자치도","46":"전라남도","47":"경상북도","48":"경상남도","50":"제주특별자치도"
-      };
       const metroName = metroMap[metroCd];
 
       const bizType=bizTypeEl.value.trim();
@@ -211,6 +359,10 @@
     const citySel2=document.getElementById('citySel2');
     const bizTypeEl=document.getElementById('bizType');
 
+    // 지도용
+    const mapMetroSel=document.getElementById('mapMetroSel');
+    const btnMapLoad=document.getElementById('btnMapLoad');
+
     // 버튼/모드 전환
     const btnIndustry=document.getElementById('btnIndustry');
     const btnBizType=document.getElementById('btnBizType');
@@ -229,6 +381,7 @@
     btnBizType.onclick  = ()=> setMode('biztype');
     document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
     document.getElementById('btnBizLoad').onclick     = loadBizType;
+    btnMapLoad.onclick = loadManufacturingMap;
 
     // 시도 선택 → 시군구 목록 로드
     metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
