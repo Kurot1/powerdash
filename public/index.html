@@ -218,10 +218,29 @@ button.primary:hover {
       padding: 22px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 18px;
     }
 
-    .example-panel textarea {
+    .example-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .example-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .example-row label {
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .example-panel textarea,
+    .example-panel input,
+    .example-panel select {
       width: 100%;
       min-height: 180px;
       background: rgba(255,255,255,0.02);
