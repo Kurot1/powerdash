@@ -161,6 +161,22 @@
   padding: 10px 12px;
 }
 
+button.primary {
+  background: linear-gradient(90deg, rgba(0,183,255,0.18), rgba(90,246,214,0.09));
+  border: 1px solid rgba(0,183,255,0.25);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all .15s ease;
+}
+
+button.primary:hover {
+  border-color: rgba(0,183,255,0.55);
+  box-shadow: 0 8px 24px rgba(0,183,255,0.12);
+}
+
 /* 지도보기 버튼만 크게 강조 */
 .btn-map {
   background: #00b7ff;
@@ -179,6 +195,9 @@
   transform: scale(1.03);
 }
 
+.btn-map.active {
+  box-shadow: 0 10px 30px rgba(0,183,255,0.35);
+}
 
     /* cards on right */
     .canvas {
@@ -193,6 +212,52 @@
       box-shadow: 0 8px 30px rgba(0,0,0,0.6);
     }
     
+    
+    .example-panel {
+      margin-bottom: 20px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .example-panel textarea {
+      width: 100%;
+      min-height: 180px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(0,183,255,0.18);
+      border-radius: 12px;
+      padding: 14px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .example-panel textarea:focus {
+      outline: none;
+      border-color: rgba(0,183,255,0.5);
+      box-shadow: 0 12px 30px rgba(0,183,255,0.08);
+    }
+
+    .example-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .example-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .example-status.error {
+      color: var(--danger);
+    }
     .usage-section {
       padding: 22px;
       margin-bottom: 20px;
@@ -354,6 +419,16 @@ select option:hover {
   </header>
 
   <main>
+    <section class="card example-panel">
+      <div class="section-title">직접 예시 입력</div>
+      <p class="muted tiny">period, facilities, tips 필드를 JSON 형식으로 작성한 뒤 아래 버튼을 누르면 인사이트 영역이 즉시 갱신됩니다.</p>
+      <textarea id="exampleInput" spellcheck="false"></textarea>
+      <div class="example-actions">
+        <span class="example-status" id="exampleStatus">샘플 데이터를 불러오는 중...</span>
+        <button class="mode-btn ghost" id="btnExampleFill" type="button">예시 값 채우기</button>
+        <button class="primary" id="btnExampleApply" type="button">입력값 인사이트 보기</button>
+      </div>
+    </section>
      <section class="card usage-section" id="usageSection">
       <div class="section-title">
         <div class="chip">샘플 사용량 인사이트</div>
@@ -468,30 +543,228 @@ select option:hover {
   </main>
 
 <script>
+  const FALLBACK_SAMPLE = {
+  period: '2024-06-01',
+  facilities: [
+    {
+      id: 'hq',
+      name: '서울 본사',
+      category: '오피스',
+      baseline: 820,
+      usage: [
+        { hour: '00:00', kwh: 32 },
+        { hour: '03:00', kwh: 28 },
+        { hour: '06:00', kwh: 46 },
+        { hour: '09:00', kwh: 78 },
+        { hour: '12:00', kwh: 96 },
+        { hour: '15:00', kwh: 84 },
+        { hour: '18:00', kwh: 72 },
+        { hour: '21:00', kwh: 54 }
+      ]
+    },
+    {
+      id: 'smart-factory',
+      name: '스마트 공장',
+      category: '제조',
+      baseline: 1340,
+      usage: [
+        { hour: '00:00', kwh: 88 },
+        { hour: '03:00', kwh: 76 },
+        { hour: '06:00', kwh: 110 },
+        { hour: '09:00', kwh: 162 },
+        { hour: '12:00', kwh: 174 },
+        { hour: '15:00', kwh: 188 },
+        { hour: '18:00', kwh: 142 },
+        { hour: '21:00', kwh: 116 }
+      ]
+    },
+    {
+      id: 'logistics',
+      name: '동탄 물류센터',
+      category: '물류',
+      baseline: 640,
+      usage: [
+        { hour: '00:00', kwh: 40 },
+        { hour: '03:00', kwh: 32 },
+        { hour: '06:00', kwh: 44 },
+        { hour: '09:00', kwh: 72 },
+        { hour: '12:00', kwh: 90 },
+        { hour: '15:00', kwh: 76 },
+        { hour: '18:00', kwh: 58 },
+        { hour: '21:00', kwh: 46 }
+      ]
+    }
+  ],
+  tips: [
+    '점심 피크(12~15시) 직전 예열/예냉 제어로 스마트공장 수요를 6% 절감',
+    '물류센터 출고 피크 이후 조명 구역 제어 자동화',
+    '본사 야간 잔류 부하를 측정하여 5kWh 이하로 고정',
+    '설비별 계약 전력을 재점검해 기본요금 초과분을 방지'
+  ]
+};
 const chart = echarts.init(document.getElementById('chart'));
 let usageLineChart = null;
 const z2 = (m)=>String(m??'').padStart(2,'0');
 const getYM = ()=>({ year:year.value.trim(), month:z2(month.value.trim()) });
 const metricKey = ()=>metric.value;
 
+const exampleInput = document.getElementById('exampleInput');
+const exampleStatus = document.getElementById('exampleStatus');
+const btnExampleApply = document.getElementById('btnExampleApply');
+const btnExampleFill = document.getElementById('btnExampleFill');
+let exampleTemplate = FALLBACK_SAMPLE;
+
+if (exampleInput) {
+  exampleInput.value = JSON.stringify(FALLBACK_SAMPLE, null, 2);
+}
+
 const formatKwh = value => `${Math.round(Number(value || 0)).toLocaleString()} kWh`;
 const formatPercent = value => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+
+const toNumber = value => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value.replace(/,/g, '')) || 0;
+  return Number(value) || 0;
+};
+
+const sumFacilityUsageLocal = facility =>
+  (facility?.usage || []).reduce((total, point) => total + toNumber(point.kwh), 0);
+
+const aggregateTimelineLocal = facilities => {
+  const bucket = new Map();
+  facilities.forEach(facility => {
+    (facility?.usage || []).forEach(point => {
+      const hour = String(point.hour ?? '');
+      if (!hour) return;
+      const prev = bucket.get(hour) || 0;
+      bucket.set(hour, prev + toNumber(point.kwh));
+    });
+  });
+  return Array.from(bucket.entries())
+    .map(([hour, kwh]) => ({ hour, kwh }))
+    .sort((a, b) => a.hour.localeCompare(b.hour));
+};
+
+const calcGrowthRateLocal = timeline => {
+  if (!timeline.length) return { absolute: 0, percentage: 0 };
+  const first = timeline[0];
+  const last = timeline[timeline.length - 1];
+  const absolute = last.kwh - first.kwh;
+  const percentage = first.kwh ? (absolute / first.kwh) * 100 : 0;
+  return { absolute, percentage };
+};
+
+function summarizeUsageInput(payload = {}) {
+  const facilities = Array.isArray(payload.facilities) ? payload.facilities : [];
+  const normalized = facilities.map(facility => ({
+    ...facility,
+    usage: Array.isArray(facility.usage)
+      ? facility.usage.map(point => ({
+          hour: String(point.hour ?? ''),
+          kwh: toNumber(point.kwh)
+        })).filter(point => point.hour)
+      : []
+  }));
+
+  const facilityTotals = normalized.map(f => ({
+    id: f.id,
+    name: f.name,
+    category: f.category,
+    total: sumFacilityUsageLocal(f),
+    baseline: f.baseline
+  }));
+
+  const timeline = aggregateTimelineLocal(normalized);
+  const totalKwh = timeline.reduce((sum, point) => sum + point.kwh, 0);
+  const averageUsage = timeline.length ? totalKwh / timeline.length : 0;
+
+  const highestUsage = facilityTotals.reduce((prev, current) =>
+    !prev || current.total > prev.total ? current : prev,
+  null);
+
+  const lowestUsage = facilityTotals.reduce((prev, current) =>
+    !prev || current.total < prev.total ? current : prev,
+  null);
+
+  const peakHour = timeline.reduce((prev, current) =>
+    !prev || current.kwh > prev.kwh ? current : prev,
+  null);
+
+  const growthRate = calcGrowthRateLocal(timeline);
+
+  return {
+    period: payload.period || '사용자 입력',
+    facilities: normalized,
+    tips: Array.isArray(payload.tips) ? payload.tips : [],
+    facilityTotals,
+    timeline,
+    insights: {
+      highestUsage,
+      lowestUsage,
+      averageUsage,
+      peakHour,
+      growthRate,
+    }
+  };
+}
+
+function setExampleStatus(message, variant = 'info') {
+  if (!exampleStatus) return;
+  exampleStatus.textContent = message;
+  exampleStatus.classList.toggle('error', variant === 'error');
+}
+
+function applyUsagePayload(payload, { context = 'sample' } = {}) {
+  const summary = summarizeUsageInput(payload);
+  const labelBase = summary.period || (context === 'example' ? '사용자 입력 데이터' : '샘플 데이터');
+  const labelSuffix = context === 'example' ? ' · 사용자 입력' : ' 기준 샘플';
+  document.getElementById('usagePeriod').textContent = `${labelBase}${labelSuffix}`;
+  renderUsageKpis(summary.insights || {});
+  renderUsageChart(summary.timeline || []);
+  renderFacilitySummary(summary.facilityTotals || []);
+  renderUsageTips(summary.tips || []);
+}
+
 
 async function fetchUsageInsights(){
   try {
     const res = await axios.get('/api/usage');
     const data = res.data || {};
-    const insights = data.insights || {};
-    document.getElementById('usagePeriod').textContent = data.period ? `${data.period} 기준 샘플` : '샘플 데이터';
-    renderUsageKpis(insights);
-    renderUsageChart(data.timeline || []);
-    renderFacilitySummary(data.facilityTotals || []);
-    renderUsageTips(data.tips || []);
+    const basePayload = {
+      period: data.period,
+      facilities: data.facilities || [],
+      tips: data.tips || []
+    };
+    exampleTemplate = basePayload;
+    if (exampleInput) {
+      exampleInput.value = JSON.stringify(basePayload, null, 2);
+    }
+    applyUsagePayload(basePayload, { context: 'sample' });
+    setExampleStatus('샘플 데이터를 불러와 입력창에 채웠습니다.');
   } catch (e) {
     console.error(e);
-    document.getElementById('usagePeriod').textContent = '샘플 데이터를 불러오지 못했습니다';
+    setExampleStatus('샘플 데이터를 불러오지 못해 기본 예시를 사용합니다.', 'error');
+    applyUsagePayload(exampleTemplate || FALLBACK_SAMPLE, { context: 'sample' });
   }
 }
+function handleExampleApply(){
+  if (!exampleInput) return;
+  try {
+    const payload = JSON.parse(exampleInput.value || '{}');
+    applyUsagePayload(payload, { context: 'example' });
+    setExampleStatus('입력한 값으로 인사이트를 계산했습니다.');
+  } catch (err) {
+    console.error(err);
+    setExampleStatus('JSON 형식이 올바르지 않습니다. 다시 확인해주세요.', 'error');
+  }
+}
+
+function handleExampleFill(){
+  if (!exampleInput) return;
+  exampleInput.value = JSON.stringify(exampleTemplate || FALLBACK_SAMPLE, null, 2);
+  setExampleStatus('예시 입력 값으로 채웠습니다. 수정 후 적용 버튼을 눌러주세요.');
+}
+
 
 function renderUsageKpis(insights){
   const grid = document.getElementById('usageKpis');
@@ -804,9 +1077,10 @@ const biztypeRow=document.getElementById('biztypeRow');
    통합 모드 관리
 --------------------------------*/
 function setMode(mode){
-  btnIndustry.className = mode==='industry' ? 'primary' : 'ghost';
-  btnBizType.className  = mode==='biztype' ? 'primary' : 'ghost';
-  btnMap.className      = mode==='map' ? 'primary' : 'ghost';
+  btnIndustry.className = `mode-btn ${mode==='industry' ? 'primary' : 'ghost'}`;
+  btnBizType.className  = `mode-btn ${mode==='biztype' ? 'primary' : 'ghost'}`;
+  btnMap.classList.toggle('active', mode==='map');
+
 
   if(mode==='map'){
     renderMap();
@@ -839,6 +1113,8 @@ function setMode(mode){
 btnIndustry.onclick = ()=> setMode('industry');
 btnBizType.onclick  = ()=> setMode('biztype');
 btnMap.onclick      = ()=> setMode('map');
+btnExampleApply?.addEventListener('click', handleExampleApply);
+btnExampleFill?.addEventListener('click', handleExampleFill);
 document.getElementById('btnIndustryLoad').onclick = loadIndustryTop;
 document.getElementById('btnBizLoad').onclick     = loadBizType;
 metroSel.addEventListener('change', ()=> loadCitiesTo(citySel, metroSel.value));
